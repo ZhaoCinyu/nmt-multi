@@ -27,6 +27,29 @@ for lang_pair in `ls ${multilingual_corpus_dir}`; do
     src_lang=${array[0]}
     tgt_lang=${array[1]}
     parallel_corpus_dir=${multilingual_corpus_dir}/${lang_pair}
+
+    # for English centric dataset, only use parallel corpora of xx -> en as the training data for sentencepiece
+    #if [[ ${tgt_lang} = "en" ]]; then
+        spm_inputs+="${parallel_corpus_dir}/opus.${src_lang}-${tgt_lang}-train.${src_lang},"
+        spm_inputs+="${parallel_corpus_dir}/opus.${src_lang}-${tgt_lang}-train.${tgt_lang},"
+    #fi
+
+done
+
+spm_inputs_len=${#spm_inputs}
+spm_inputs=${spm_inputs:0:spm_inputs_len-1}
+
+spm_train --normalization_rule_name identity --input ${spm_inputs} --model_prefix ${spm_data_dir}/spm --vocab_size ${vocab_size} --character_coverage 1.0 --model_type bpe
+
+echo "spm training end!"
+
+lang_sets=""
+
+for lang_pair in `ls ${multilingual_corpus_dir}`; do
+    array=(${lang_pair//-/ })
+    src_lang=${array[0]}
+    tgt_lang=${array[1]}
+    parallel_corpus_dir=${multilingual_corpus_dir}/${lang_pair}
     
     output_spm_parallel_corpus_dir=${spm_corpus_dir}/${lang_pair}
     mkdir -p ${output_spm_parallel_corpus_dir}
