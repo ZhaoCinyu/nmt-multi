@@ -1,16 +1,14 @@
 #!/bin/bash
 
 set -e
+export PYTHONPATH=/path/to/nmt-multi:${PYTHONPATH}
 
-project_dir="fill the project path here"
+project_dir="/path/to/nmt-multi"
 
 # filename format in multilingual_corpus_dir
-# train.${src_lang}-${tgt_lang}.${src_lang}, train.${src_lang}-${tgt_lang}.${tgt_lang}
-# valid.${src_lang}-${tgt_lang}.${src_lang}, valid.${src_lang}-${tgt_lang}.${tgt_lang}
-# test.${src_lang}-${tgt_lang}.${src_lang}, test.${src_lang}-${tgt_lang}.${tgt_lang}
-multilingual_corpus_dir="raw corpus directory path"
+multilingual_corpus_dir="/path/to/opus-100-corpus/v1.0/supervised"
 
-root_data_dir=${project_dir}/data/opus-100-corpus/preprocessed_data
+root_data_dir=${project_dir}/data/opus-100-preprocessed
 
 spm_data_dir=${root_data_dir}/spm_data
 spm_corpus_dir=${root_data_dir}/spm_corpus
@@ -29,60 +27,37 @@ for lang_pair in `ls ${multilingual_corpus_dir}`; do
     src_lang=${array[0]}
     tgt_lang=${array[1]}
     parallel_corpus_dir=${multilingual_corpus_dir}/${lang_pair}
-
-    # for English centric dataset, only use parallel corpora of xx -> en as the training data for sentencepiece
-    if [[ ${tgt_lang} = "en" ]]; then
-        spm_inputs+="${parallel_corpus_dir}/train.${src_lang}-${tgt_lang}.${src_lang},"
-        spm_inputs+="${parallel_corpus_dir}/train.${src_lang}-${tgt_lang}.${tgt_lang},"
-    fi
-
-done
-
-spm_inputs_len=${#spm_inputs}
-spm_inputs=${spm_inputs:0:spm_inputs_len-1}
-
-spm_train --normalization_rule_name identity --input ${spm_inputs} --model_prefix ${spm_data_dir}/spm --vocab_size ${vocab_size} --character_coverage 1.0 --model_type bpe
-
-echo "spm training end!"
-
-lang_sets=""
-
-for lang_pair in `ls ${multilingual_corpus_dir}`; do
-    array=(${lang_pair//-/ })
-    src_lang=${array[0]}
-    tgt_lang=${array[1]}
-    parallel_corpus_dir=${multilingual_corpus_dir}/${lang_pair}
-
+    
     output_spm_parallel_corpus_dir=${spm_corpus_dir}/${lang_pair}
     mkdir -p ${output_spm_parallel_corpus_dir}
 
-    spm_encode --model ${spm_data_dir}/spm.model --output_format piece < ${parallel_corpus_dir}/train.${src_lang}-${tgt_lang}.${src_lang} > ${output_spm_parallel_corpus_dir}/train.${src_lang}-${tgt_lang}.${src_lang}
-    spm_encode --model ${spm_data_dir}/spm.model --output_format piece < ${parallel_corpus_dir}/train.${src_lang}-${tgt_lang}.${tgt_lang} > ${output_spm_parallel_corpus_dir}/train.${src_lang}-${tgt_lang}.${tgt_lang}
+    spm_encode --model ${spm_data_dir}/spm.model --output_format piece < ${parallel_corpus_dir}/opus.${src_lang}-${tgt_lang}-train.${src_lang} > ${output_spm_parallel_corpus_dir}/opus.${src_lang}-${tgt_lang}-train.${src_lang}
+    spm_encode --model ${spm_data_dir}/spm.model --output_format piece < ${parallel_corpus_dir}/opus.${src_lang}-${tgt_lang}-train.${tgt_lang} > ${output_spm_parallel_corpus_dir}/opus.${src_lang}-${tgt_lang}-train.${tgt_lang}
 
     python -u ${project_dir}/nmt/data_handling/corpus_manager.py \
-        --src_path ${output_spm_parallel_corpus_dir}/train.${src_lang}-${tgt_lang}.${src_lang} \
-        --tgt_path ${output_spm_parallel_corpus_dir}/train.${src_lang}-${tgt_lang}.${tgt_lang} \
+        --src_path ${output_spm_parallel_corpus_dir}/opus.${src_lang}-${tgt_lang}-train.${src_lang} \
+        --tgt_path ${output_spm_parallel_corpus_dir}/opus.${src_lang}-${tgt_lang}-train.${tgt_lang} \
         --output_src_path ${output_spm_parallel_corpus_dir}/train.remove_long_sentence.${src_lang}-${tgt_lang}.${src_lang} \
         --output_tgt_path ${output_spm_parallel_corpus_dir}/train.remove_long_sentence.${src_lang}-${tgt_lang}.${tgt_lang} \
         --operation remove_long_sentence \
         --max_sentence_length 100
-    
+
     echo "======== remove_long_sentence of training data end! ========"
 
     lang_sets+="${src_lang} "
     lang_sets+="${tgt_lang} "
 
-    for corpus_type in "valid" "test"; do
-        # split valid and test set into subwords
-        if [[ -f ${parallel_corpus_dir}/${corpus_type}.${src_lang}-${tgt_lang}.${src_lang} ]] && [[ -f ${parallel_corpus_dir}/${corpus_type}.${src_lang}-${tgt_lang}.${tgt_lang} ]]; then
-            spm_encode --model ${spm_data_dir}/spm.model --output_format piece < ${parallel_corpus_dir}/${corpus_type}.${src_lang}-${tgt_lang}.${src_lang} > ${output_spm_parallel_corpus_dir}/${corpus_type}.${src_lang}-${tgt_lang}.${src_lang}
-            spm_encode --model ${spm_data_dir}/spm.model --output_format piece < ${parallel_corpus_dir}/${corpus_type}.${src_lang}-${tgt_lang}.${tgt_lang} > ${output_spm_parallel_corpus_dir}/${corpus_type}.${src_lang}-${tgt_lang}.${tgt_lang}
+    for corpus_type in "dev" "test"; do
+        # split dev and test set into subwords
+        if [[ -f ${parallel_corpus_dir}/opus.${src_lang}-${tgt_lang}-${corpus_type}.${src_lang} ]] && [[ -f ${parallel_corpus_dir}/opus.${src_lang}-${tgt_lang}-${corpus_type}.${tgt_lang} ]]; then
+            spm_encode --model ${spm_data_dir}/spm.model --output_format piece < ${parallel_corpus_dir}/opus.${src_lang}-${tgt_lang}-${corpus_type}.${src_lang} > ${output_spm_parallel_corpus_dir}/opus.${src_lang}-${tgt_lang}-${corpus_type}.${src_lang}
+            spm_encode --model ${spm_data_dir}/spm.model --output_format piece < ${parallel_corpus_dir}/opus.${src_lang}-${tgt_lang}-${corpus_type}.${tgt_lang} > ${output_spm_parallel_corpus_dir}/opus.${src_lang}-${tgt_lang}-${corpus_type}.${tgt_lang}
 
-            # remove long sentences in valid set
-            if [[ ${corpus_type} = "valid" ]]; then
+            # remove long sentences in dev set
+            if [[ ${corpus_type} = "dev" ]]; then
                 python -u ${project_dir}/nmt/data_handling/corpus_manager.py \
-                    --src_path ${output_spm_parallel_corpus_dir}/${corpus_type}.${src_lang}-${tgt_lang}.${src_lang} \
-                    --tgt_path ${output_spm_parallel_corpus_dir}/${corpus_type}.${src_lang}-${tgt_lang}.${tgt_lang} \
+                    --src_path ${output_spm_parallel_corpus_dir}/opus.${src_lang}-${tgt_lang}-${corpus_type}.${src_lang} \
+                    --tgt_path ${output_spm_parallel_corpus_dir}/opus.${src_lang}-${tgt_lang}-${corpus_type}.${tgt_lang} \
                     --output_src_path ${output_spm_parallel_corpus_dir}/${corpus_type}.remove_long_sentence.${src_lang}-${tgt_lang}.${src_lang} \
                     --output_tgt_path ${output_spm_parallel_corpus_dir}/${corpus_type}.remove_long_sentence.${src_lang}-${tgt_lang}.${tgt_lang} \
                     --operation remove_long_sentence \
@@ -128,11 +103,10 @@ for lang_pair in `ls ${spm_corpus_dir}`; do
     array=(${lang_pair//-/ })
     src_lang=${array[0]}
     tgt_lang=${array[1]}
-
     options=""
-    
-    if [[ -f ${spm_parallel_corpus}/valid.remove_long_sentence.${src_lang}-${tgt_lang}.${src_lang} ]] && [[ -f ${spm_parallel_corpus}/valid.remove_long_sentence.${src_lang}-${tgt_lang}.${tgt_lang} ]]; then
-        options+="--validpref ${spm_parallel_corpus}/valid.remove_long_sentence.${src_lang}-${tgt_lang} "
+
+    if [[ -f ${spm_parallel_corpus}/dev.remove_long_sentence.${src_lang}-${tgt_lang}.${src_lang} ]] && [[ -f ${spm_parallel_corpus}/dev.remove_long_sentence.${src_lang}-${tgt_lang}.${tgt_lang} ]]; then
+        options+="--validpref ${spm_parallel_corpus}/dev.remove_long_sentence.${src_lang}-${tgt_lang} "
         lang_pairs+="${lang_pair}\n"
     else
         extra_lang_pairs+="${lang_pair}\n"
@@ -142,8 +116,8 @@ for lang_pair in `ls ${spm_corpus_dir}`; do
         options+="--testpref ${spm_parallel_corpus}/test.remove_long_sentence.${src_lang}-${tgt_lang} "
     fi
 
-    if [[ -f ${spm_parallel_corpus}/test.${src_lang}-${tgt_lang}.${src_lang} ]] && [[ -f ${spm_parallel_corpus}/test.${src_lang}-${tgt_lang}.${tgt_lang} ]]; then
-        options+="--testpref ${spm_parallel_corpus}/test.${src_lang}-${tgt_lang} "
+    if [[ -f ${spm_parallel_corpus}/opus.${src_lang}-${tgt_lang}-test.${src_lang} ]] && [[ -f ${spm_parallel_corpus}/opus.${src_lang}-${tgt_lang}-test.${tgt_lang} ]]; then
+        options+="--testpref ${spm_parallel_corpus}/opus.${src_lang}-${tgt_lang}-test"
     fi
 
     destdir=${main_data_bin_dir}
