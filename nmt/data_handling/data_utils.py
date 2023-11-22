@@ -13,6 +13,24 @@ def read_data(data_path: str, remove_chars: Optional[str]=None):
         data = [line.strip(remove_chars) for line in f]
         return data
 
+def read_data_wmt(file_path):
+    lines = []
+    with open(file_path, "rb") as file:
+        for line in file:
+            decoded_line = line.decode().strip()
+            lines.append(decoded_line)
+    return lines
+
+def write_data_wmt(data: List[str], data_path: str):
+    data_path = os.path.abspath(data_path)
+    directory = os.path.dirname(data_path)
+
+    if not os.path.isdir(directory):
+        os.makedirs(directory)
+
+    data = ["{}\n".format(line.replace('\r','')) for line in data]
+    with open(data_path, "w", encoding="utf-8") as f:
+        f.writelines(data)
 
 def write_data(data: List[str], data_path: str):
     data_path = os.path.abspath(data_path)
